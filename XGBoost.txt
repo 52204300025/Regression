@@ -1,0 +1,166 @@
+# -!- coding: utf-8 -!-
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import LabelEncoder
+import matplotlib.pyplot as plt
+from sklearn.model_selection import GridSearchCV
+import seaborn as sns
+import os
+from sklearn.model_selection import train_test_split,GridSearchCV,cross_val_score
+from sklearn import metrics
+from sklearn.metrics import r2_score
+from xgboost import XGBRegressor
+import xgboost as xgb
+from sklearn.metrics import mean_squared_error as mse
+from sklearn.metrics import median_absolute_error as mae
+from sklearn.metrics import mean_absolute_percentage_error as mape
+
+np.random.seed(0)
+os.chdir('')
+df=pd.read_excel('1-Octene.xlsx')
+df_cor=df.corr()
+fig1=plt.figure()
+sns.heatmap(data=df_cor,cmap="YlGnBu",robust=True,annot=True)
+plt.title('Correlation matrix',fontsize=15)
+plt.show()
+X=df.iloc[:,0:8].values
+y=df.iloc[:,9].values
+print(df.head())
+
+#划分数据集和测试集
+X_train, X_test, y_train, y_test = train_test_split(X,y,test_size=0.2,random_state=1800)
+other_params = {'eta': 0.3, 'n_estimators': 500, 'gamma': 0, 'max_depth': 6, 'min_child_weight': 1,
+                'colsample_bytree': 1, 'colsample_bylevel': 1, 'subsample': 1, 'reg_lambda': 1, 'reg_alpha': 0,
+                'seed': 33}
+
+
+print("----n_estimators")
+cv_params = {'n_estimators': np.linspace(10, 150, 10, dtype=int)}
+regress_model = xgb.XGBRegressor(**other_params) 
+gsearch1 = GridSearchCV(regress_model, cv_params, verbose=2, refit=True, scoring='r2', cv=5, n_jobs=-1)
+gsearch1.fit(X, y)  # X为训练数据的特征值，y为训练数据的label
+gsearch1.best_params_, gsearch1.best_score_
+print("best-n_estimators:", gsearch1.best_params_)
+print("best score:", gsearch1.best_score_)
+
+best_n_estimators = gsearch1.best_params_['n_estimators']
+
+print("----max_depth")
+cv_params = {'max_depth': np.linspace(5, 20, 1, dtype=int)}
+regress_model = xgb.XGBRegressor(**other_params) 
+gsearch2 = GridSearchCV(regress_model, cv_params, verbose=2, refit=True, scoring='r2', cv=5, n_jobs=-1)
+gsearch2.fit(X, y) 
+gsearch2.best_params_, gsearch2.best_score_
+print("best-max_depth:", gsearch2.best_params_)
+print("best score:", gsearch2.best_score_)
+best_max_depth = gsearch2.best_params_['max_depth']
+
+print("----min_child_weight")
+cv_params = {'min_child_weight': np.linspace(1, 10, 1, dtype=int)}
+regress_model = xgb.XGBRegressor(**other_params)  
+gsearch3 = GridSearchCV(regress_model, cv_params, verbose=2, refit=True, scoring='r2', cv=5, n_jobs=-1)
+gsearch3.fit(X, y) 
+gsearch3.best_params_, gsearch3.best_score_
+print("best-min_child_weight:", gsearch3.best_params_)
+print("best score:", gsearch3.best_score_)
+best_min_child_weight = gsearch3.best_params_['min_child_weight']
+
+print("----subsample")
+cv_params = {'subsample': np.linspace(0, 1, 11)}
+regress_model = xgb.XGBRegressor(**other_params)  
+gsearch5 = GridSearchCV(regress_model, cv_params, verbose=2, refit=True, scoring='r2', cv=5, n_jobs=-1)
+gsearch5.fit(X, y)  
+gsearch5.best_params_, gsearch5.best_score_
+print("best-subsample:", gsearch5.best_params_)
+print("best score:", gsearch5.best_score_)
+best_subsample = gsearch5.best_params_['subsample']
+
+print("----colsample_bytree")
+cv_params = {'colsample_bytree': np.linspace(0, 1, 11)[1:]}
+regress_model = xgb.XGBRegressor(**other_params) 
+gsearch6 = GridSearchCV(regress_model, cv_params, verbose=2, refit=True, scoring='r2', cv=5, n_jobs=-1)
+gsearch6.fit(X, y)  
+gsearch6.best_params_, gsearch6.best_score_
+print("best-colsample_bytree:", gsearch6.best_params_)
+print("best score:", gsearch6.best_score_)
+best_colsample_bytree = gsearch6.best_params_['colsample_bytree']
+
+print("----reg_lambda")
+cv_params = {'reg_lambda': np.linspace(0, 1, 11)}
+regress_model = xgb.XGBRegressor(**other_params)
+gsearch7 = GridSearchCV(regress_model, cv_params, verbose=2, refit=True, scoring='r2', cv=5, n_jobs=-1)
+gsearch7.fit(X, y)  
+gsearch7.best_params_, gsearch7.best_score_
+print("best-reg_lambda:", gsearch7.best_params_)
+print("best score:", gsearch7.best_score_)
+best_reg_lambda = gsearch7.best_params_['reg_lambda']
+
+print("----reg_alpha")
+cv_params = {'reg_alpha': np.linspace(0, 0.5, 11)}
+regress_model = xgb.XGBRegressor(**other_params)  # 注意这里的两个 * 号！
+gsearch8 = GridSearchCV(regress_model, cv_params, verbose=2, refit=True, scoring='r2', cv=5, n_jobs=-1)
+gsearch8.fit(X, y) 
+gsearch8.best_params_, gsearch8.best_score_
+print("best-reg_alpha:", gsearch8.best_params_)
+print("best score:", gsearch8.best_score_)
+best_reg_alpha = gsearch8.best_params_['reg_alpha']
+
+print("---XGBoostModel")
+best_model = XGBRegressor(n_estimators=best_n_estimators, learning_rate=0.08, max_depth=best_max_depth,gamma=0.1, reg_alpha=best_reg_alpha,
+                          reg_lambda=best_reg_lambda, min_child_weight=best_min_child_weight, colsample_bytree=best_colsample_bytree, subsample=best_subsample, random_state=90)
+best_model.fit(X_train, y_train)
+y_pred = best_model.predict(X_train)
+y2_pred = best_model.predict(X_test)
+
+
+#R2——评价指标，此段为训练集，直接套用评价指标函数，必须要返回模型
+def R22_0(estimator,X_train, y_train):
+    y_pred=estimator.predict(X_train)
+    SStot=np.sum((y_train-np.mean(y_train))**2)
+    SSres=np.sum((y_train-y2_pred)**2)
+    r2=1-SSres/SStot
+    return r22
+
+def R2_0(estimator,X_test,y_test):
+    y2_pred=estimator.predict(X_test)
+    SStot=np.sum((y_test-np.mean(y_test))**2)
+    SSres=np.sum((y_test-y2_pred)**2)
+    r2=1-SSres/SStot
+    return r2
+
+print('r2(training sets):', r2_score(y_train, y_pred))
+print('r2(test sets):', r2_score(y_test, y2_pred))
+print('Mae(test sets):', metrics.mean_absolute_error(y_test, y2_pred))
+print('RMse(test sets):',
+      np.sqrt(metrics.mean_squared_error(y_test, y2_pred)))
+
+fig2=plt.figure(dpi=500)
+import seaborn as sns
+sns.regplot(x=y_train, y=y_pred)
+plt.xlabel('predictions')
+plt.ylabel('actual value')
+plt.title('Training sets performance plots-0')
+plt.show
+
+fig3=plt.figure(dpi=500)
+import seaborn as sns
+sns.regplot(x=y_test, y=y2_pred)
+plt.xlabel('predictions')
+plt.ylabel('actual value')
+plt.title('Test sets performance plots-0')
+plt.show
+
+importances = list(best_model.feature_importances_)
+print(importances)
+fig4=plt.figure(dpi=500)
+feature_list = list(df.columns)[0:8]
+feature_importances = [(feature, round(importance, 2)) for feature, importance in zip(feature_list, importances)]
+feature_importances = sorted(feature_importances, key = lambda x: x[1], reverse = True)
+x_values = list(range(len(importances)))
+print(x_values)
+plt.bar(x_values, importances, orientation = 'vertical')
+plt.xticks(x_values, feature_list,rotation=0)
+plt.ylabel('%'); plt.xlabel('feature'); plt.title('Descriptor importance-0');
+plt.show()
+
+
