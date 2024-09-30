@@ -1,0 +1,148 @@
+# -!- coding: utf-8 -!-
+#----配置环境----------------------
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import LabelEncoder,OneHotEncoder
+import matplotlib.pyplot as plt
+plt.rcParams['font.sans-serif'] = ['SimHei']  # 显示中文(windows)
+plt.rcParams['axes.unicode_minus'] = False   # 用来正常显示负号
+from sklearn.model_selection import GridSearchCV
+#利用网格搜索进行调参
+import seaborn as sns
+import os
+from xgboost import XGBRegressor
+from sklearn.metrics import r2_score
+from sklearn.metrics import mean_squared_error as mse
+from sklearn.metrics import median_absolute_error as mae
+from sklearn.metrics import mean_absolute_percentage_error as mape
+from scipy.sparse import csr_matrix
+from sklearn import metrics
+#定义新的评价指标
+def rmse(actual: np.ndarray, predicted: np.ndarray):
+    """ Root Mean Squared Error """
+    return np.sqrt(mse(actual, predicted))
+
+np.random.seed(0) 
+os.chdir('/home/shn/ML data/RRF/1-Octene')
+df=pd.read_excel('Rh-smiles.xlsx')
+#----数据处理
+
+
+data_tmp = pd.get_dummies(df[['precatalyst']], prefix=None, prefix_sep='_', dummy_na=False, columns=None, 
+                   sparse=False, drop_first=True, dtype=None)
+
+data_tmp.columns =['pre_'+str(i)  for i in range(305)]
+
+df_new = pd.concat([df[['S/C', 'solvent', 'temperature', 'time', 'bar']]
+                    ,data_tmp,df[['yield',       'linear']]],axis=1)
+
+
+
+
+
+#----划分数据
+from sklearn.model_selection import train_test_split
+y1=df_new.iloc[:,310]
+y2=df_new.iloc[:,311]
+X=df_new.iloc[:,0:310]
+
+from sklearn.metrics import r2_score,mean_squared_error
+
+
+def R2_0(estimator,X_test,y_test):
+    y_pred=estimator.predict(X_test)
+    SStot=np.sum((y_test-np.mean(y_test))**2)
+    SSres=np.sum((y_test-y_pred)**2)
+    r2=1-SSres/SStot
+    return r2
+
+
+def creat_model(X,y,size,name,m_name):
+    #----构建模型
+    print(name)
+    print(m_name)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=size, random_state=33)
+
+
+    bas_model=XGBRegressor()
+    #----调节参数
+    param_test = {'n_estimators': range(20, 60, 10),#树的个数
+                  'max_depth':range(8, 12, 2), 
+                  'min_child_weight':range(1, 5, 1)
+                  }
+    
+    grid = GridSearchCV(estimator = bas_model, param_grid = param_test, cv=5,n_jobs = -1)# 5折交叉验证
+    grid.fit(X_train, y_train) #默认使用最优的参数
+    print(name+'best_score:', grid.best_params_)
+    print(grid.best_score_)
+    
+    best_p=grid.best_params_
+    
+    jvzhen=pd.DataFrame(grid.cv_results_).T
+    
+    best_model=XGBRegressor(max_depth= best_p['max_depth'], n_estimators=best_p['n_estimators'], min_child_weight=best_p['min_child_weight'])
+    best_model.fit(X_train, y_train)
+    train_pre=best_model.predict(X_train)
+    test_pre= best_model.predict(X_test)
+    
+    print(name+'training sets R2'+'-'+m_name,r2_score(y_train,train_pre))
+    print(name+'test sets R2'+'-'+m_name,r2_score(y_test,test_pre))
+    print('----------------------------------------------------------------------')
+    print(name+'training sets MSE'+'-'+m_name,mean_squared_error(y_train,train_pre))
+    print(name+'test sets MSE'+'-'+m_name,mean_squared_error(y_test,test_pre))
+    print('----------------------------------------------------------------------')
+    print(name+'training sets MAE',metrics.mean_absolute_error(y_train,train_pre))
+    print(name+'test sets MAE',metrics.mean_absolute_error(y_test,test_pre))
+    print('----------------------------------------------------------------------')
+    print(name+'training sets RMse',
+      np.sqrt(metrics.mean_squared_error(y_train,train_pre)))
+    print(name+'training sets RMse',
+      np.sqrt(metrics.mean_squared_error(y_test,test_pre)))
+
+    print('----------------------------------------------------------------------')
+    print(name+'training sets MAPE',mape(y_train,train_pre))
+    print(name+'test sets MAPE',mape(y_test,test_pre))
+    
+    fig2=plt.figure(dpi=500)    
+    sns.regplot(x=train_pre,y=y_train)
+    
+    plt.xlabel('predictions')
+    plt.ylabel('actual value')
+    plt.title(name+'training sets '+'-'+m_name)
+    plt.show()
+    
+    fig3=plt.figure(dpi=500)    
+    sns.regplot(x=test_pre,y=y_test)
+    plt.xlabel('predictions')
+    plt.ylabel('actual value')
+    plt.title(name+'test sets'+'-'+m_name)
+    plt.show()
+    
+   #----重要变量
+   # 重要性
+    # features_import = pd.DataFrame(X_train.columns, columns=['feature'])
+    # features_import['importance'] = best_model.feature_importances_  # 默认按照gini计算特征重要性
+    # features_import.sort_values('importance', inplace=True)
+    # fig4=plt.figure()
+    # plt.barh(features_import['feature'], features_import['importance'], height=0.7, color='#008792', edgecolor='#005344') # 更多颜色可参见颜色大全
+    # plt.xlabel('feature importance') # x 轴
+    # plt.ylabel('features') # y轴
+    # plt.title('Feature Importances') # 标题
+    # for a,b in zip( features_import['importance'],features_import['feature']): # 添加数字标签
+    #   print(a,b)
+    #   plt.text(a+0.001, b,'%.3f'%float(a)) # a+0.001代表标签位置在柱形图上方0.001处
+    # plt.show()
+
+    
+    return best_p,jvzhen
+
+
+
+    
+p1,jvzhen1=creat_model(X, y1,size=0.3,name='yield2',m_name='XGBoost') 
+
+p2,jvzhen2=creat_model(X, y2,size=0.3,name='linear2',m_name='XGBoost')
+
+
+
+
